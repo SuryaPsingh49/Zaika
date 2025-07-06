@@ -133,12 +133,29 @@ def init_db():
             );
         ''')
 
+        # Insert default admin user
         admin_password = generate_password_hash('admin123')
         cur.execute('''
             INSERT INTO users (username, email, password, role)
             VALUES ('admin', 'admin@restaurant.com', %s, 'admin')
             ON CONFLICT (username) DO NOTHING;
         ''', (admin_password,))
+
+        # Insert default cook user
+        cook_password = generate_password_hash('cook123')
+        cur.execute('''
+            INSERT INTO users (username, email, password, role)
+            VALUES ('cook', 'cook@restaurant.com', %s, 'cook')
+            ON CONFLICT (username) DO NOTHING;
+        ''', (cook_password,))
+
+        # Insert default biller user
+        biller_password = generate_password_hash('biller123')
+        cur.execute('''
+            INSERT INTO users (username, email, password, role)
+            VALUES ('biller', 'biller@restaurant.com', %s, 'biller')
+            ON CONFLICT (username) DO NOTHING;
+        ''', (biller_password,))
 
         conn.commit()
     except Exception as e:
@@ -181,7 +198,7 @@ def login():
             else:
                 flash('Invalid username or password', 'error')
         except Exception as e:
-            flash(f'Database error: {e}', 'error')
+            flash(f'Database error during login: {e}', 'error')
             print(f"Login error: {e}")
         finally:
             if conn:
@@ -217,7 +234,7 @@ def register():
             cur.close()
             return redirect(url_for('login'))
         except Exception as e:
-            flash(f'Database error: {e}', 'error')
+            flash(f'Database error during registration: {e}', 'error')
             print(f"Registration error: {e}")
             if conn:
                 conn.rollback()
@@ -306,7 +323,7 @@ def dashboard():
             data = {'customer_orders': customer_orders}
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching dashboard data: {e}', 'error')
         print(f"Dashboard error: {e}")
     finally:
         if conn:
@@ -328,7 +345,7 @@ def menu():
         menu_items = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching menu items: {e}', 'error')
         print(f"Menu error: {e}")
     finally:
         if conn:
@@ -339,6 +356,7 @@ def menu():
 @app.route('/add_menu_item', methods=['POST'])
 def add_menu_item():
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access.', 'error')
         return redirect(url_for('login'))
 
     name = request.form['name']
@@ -357,10 +375,11 @@ def add_menu_item():
             image_url = url_for('static', filename=f'uploads/menu_images/{filename}') # Store static URL
             flash('Image uploaded successfully!', 'success')
         else:
-            flash('Invalid file type or no file selected.', 'error')
+            flash('Invalid file type or no file selected for image upload.', 'error')
+            return redirect(url_for('menu')) # Redirect back if file is invalid
     else:
-        flash('No image file provided.', 'error')
-
+        flash('No image file provided for new menu item.', 'error')
+        return redirect(url_for('menu')) # Redirect back if no file
 
     conn = None
     try:
@@ -372,7 +391,7 @@ def add_menu_item():
         flash('Menu item added successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error adding menu item: {e}', 'error')
         print(f"Add menu item error: {e}")
         if conn:
             conn.rollback()
@@ -385,6 +404,7 @@ def add_menu_item():
 @app.route('/edit_menu_item/<int:item_id>', methods=['POST'])
 def edit_menu_item(item_id):
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access.', 'error')
         return redirect(url_for('login'))
 
     name = request.form['name']
@@ -405,7 +425,7 @@ def edit_menu_item(item_id):
             existing_image_url = item_data['image_url']
         cur.close()
     except Exception as e:
-        flash(f'Database error fetching existing image: {e}', 'error')
+        flash(f'Database error fetching existing image for edit: {e}', 'error')
         print(f"Edit menu item fetch error: {e}")
         existing_image_url = None # Proceed with None if fetch fails
     finally:
@@ -426,7 +446,7 @@ def edit_menu_item(item_id):
         elif file.filename == '': # No new file uploaded, keep existing
             image_url_to_save = existing_image_url
         else: # Invalid file type for new upload
-            flash('Invalid file type for new image.', 'error')
+            flash('Invalid file type for new image. Keeping existing image.', 'error')
             image_url_to_save = existing_image_url # Keep existing if new upload is invalid
 
 
@@ -443,7 +463,7 @@ def edit_menu_item(item_id):
         flash('Menu item updated successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error updating menu item: {e}', 'error')
         print(f"Edit menu item error: {e}")
         if conn:
             conn.rollback()
@@ -456,6 +476,7 @@ def edit_menu_item(item_id):
 @app.route('/delete_menu_item/<int:item_id>')
 def delete_menu_item(item_id):
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -467,7 +488,7 @@ def delete_menu_item(item_id):
         flash('Menu item deleted successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error deleting menu item: {e}', 'error')
         print(f"Delete menu item error: {e}")
         if conn:
             conn.rollback()
@@ -480,6 +501,7 @@ def delete_menu_item(item_id):
 @app.route('/place_order', methods=['POST'])
 def place_order():
     if 'user_id' not in session or session['role'] != 'customer':
+        flash('Unauthorized access.', 'error')
         return redirect(url_for('login'))
 
     cart_items = request.form.getlist('cart_items')
@@ -499,16 +521,26 @@ def place_order():
 
         for i, item_id in enumerate(cart_items):
             quantity = int(quantities[i])
-            cur.execute('SELECT * FROM menu_items WHERE id = %s', (item_id,))
-            menu_item = cur.fetchone()
+            # Fetch item details using RealDictCursor for easier access by name
+            cur_item = conn.cursor(cursor_factory=extras.RealDictCursor)
+            cur_item.execute('SELECT * FROM menu_items WHERE id = %s', (item_id,))
+            menu_item = cur_item.fetchone()
+            cur_item.close()
+
             if menu_item:
-                item_total = menu_item[3] * quantity
+                item_total = menu_item['price'] * quantity # Access by dictionary key
                 total_amount += item_total
                 order_items.append({
                     'menu_item_id': item_id,
                     'quantity': quantity,
-                    'price': menu_item[3]
+                    'price': menu_item['price'] # Access by dictionary key
                 })
+            else:
+                flash(f'Menu item with ID {item_id} not found. Order not placed.', 'error')
+                if conn:
+                    conn.rollback()
+                return redirect(url_for('menu'))
+
 
         cur.execute('''
             INSERT INTO orders (customer_id, total_amount, status)
@@ -527,7 +559,7 @@ def place_order():
         flash(f'Order placed successfully! Order ID: {order_id}', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error placing order: {e}', 'error')
         print(f"Place order error: {e}")
         if conn:
             conn.rollback()
@@ -551,31 +583,17 @@ def orders():
         role = session['role']
 
         if role == 'admin':
-            cur.execute('SELECT COUNT(*) as count FROM orders')
-            total_orders = cur.fetchone()['count']
-            cur.execute('SELECT COUNT(*) as count FROM orders WHERE status = %s', ('pending',))
-            pending_orders = cur.fetchone()['count']
-            cur.execute('SELECT SUM(total_amount) as total FROM orders WHERE status = %s', ('completed',))
-            total_revenue = cur.fetchone()['total'] or 0
-            cur.execute('SELECT COUNT(*) as count FROM users WHERE role = %s', ('customer',))
-            total_customers = cur.fetchone()['count']
-
             cur.execute('''
-                SELECT o.*, u.username as customer_name
+                SELECT o.*, u.username as customer_name, c.username as cook_name
                 FROM orders o
                 JOIN users u ON o.customer_id = u.id
                 LEFT JOIN users c ON o.cook_id = c.id
-                ORDER BY o.order_date DESC LIMIT 5
+                ORDER BY o.order_date DESC
             ''')
-            recent_orders = cur.fetchall()
+            orders_list = cur.fetchall()
 
-            data = {
-                'total_orders': total_orders,
-                'pending_orders': pending_orders,
-                'total_revenue': total_revenue,
-                'total_customers': total_customers,
-                'recent_orders': recent_orders
-            }
+            cur.execute('SELECT id, username FROM users WHERE role = %s', ('cook',)) # Select ID and username
+            cooks = cur.fetchall()
 
         elif role == 'cook':
             cur.execute('''
@@ -585,23 +603,19 @@ def orders():
                 WHERE o.cook_id = %s AND o.status IN (%s, %s)
                 ORDER BY o.order_date ASC
             ''', (session['user_id'], 'received', 'preparing'))
-            assigned_orders = cur.fetchall()
-
-            data = {'assigned_orders': assigned_orders}
+            orders_list = cur.fetchall()
 
         elif role == 'biller':
             cur.execute('''
                 SELECT o.*, u.username as customer_name
                 FROM orders o
                 JOIN users u ON o.customer_id = u.id
-                WHERE o.status = %s
-                ORDER BY o.order_date ASC
-            ''', ('ready',))
-            ready_orders = cur.fetchall()
+                WHERE o.status IN (%s, %s)
+                ORDER BY o.order_date DESC
+            ''', ('ready', 'completed'))
+            orders_list = cur.fetchall()
 
-            data = {'ready_orders': ready_orders}
-
-        else:
+        else: # Customer
             cur.execute('''
                 SELECT * FROM orders
                 WHERE customer_id = %s
@@ -610,7 +624,7 @@ def orders():
             orders_list = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching orders: {e}', 'error')
         print(f"Orders page error: {e}")
     finally:
         if conn:
@@ -621,6 +635,7 @@ def orders():
 @app.route('/assign_order/<int:order_id>/<int:cook_id>')
 def assign_order(order_id, cook_id):
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access to assign order.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -632,7 +647,7 @@ def assign_order(order_id, cook_id):
         flash('Order assigned successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error assigning order: {e}', 'error')
         print(f"Assign order error: {e}")
         if conn:
             conn.rollback()
@@ -645,11 +660,12 @@ def assign_order(order_id, cook_id):
 @app.route('/update_order_status/<int:order_id>/<status>')
 def update_order_status(order_id, status):
     if 'user_id' not in session:
+        flash('Unauthorized access to update order status.', 'error')
         return redirect(url_for('login'))
 
     valid_statuses = ['received', 'preparing', 'ready', 'completed']
     if status not in valid_statuses:
-        flash('Invalid status', 'error')
+        flash('Invalid status provided.', 'error')
         return redirect(url_for('orders'))
 
     conn = None
@@ -661,7 +677,7 @@ def update_order_status(order_id, status):
         flash(f'Order status updated to {status}!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error updating order status: {e}', 'error')
         print(f"Update order status error: {e}")
         if conn:
             conn.rollback()
@@ -674,8 +690,8 @@ def update_order_status(order_id, status):
 @app.route('/get_order_details/<int:order_id>')
 def get_order_details(order_id):
     if 'user_id' not in session:
-        return redirect(url_for('login'))
-
+        return jsonify({'error': 'Unauthorized'}), 401 # Return JSON for AJAX
+    
     conn = None
     items = []
     try:
@@ -735,7 +751,7 @@ def reservations():
             reservations_list = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching reservations: {e}', 'error')
         print(f"Reservations page error: {e}")
     finally:
         if conn:
@@ -746,6 +762,7 @@ def reservations():
 @app.route('/make_reservation', methods=['POST'])
 def make_reservation():
     if 'user_id' not in session:
+        flash('Unauthorized access.', 'error')
         return redirect(url_for('login'))
 
     customer_name = request.form['customer_name']
@@ -769,7 +786,7 @@ def make_reservation():
         flash('Reservation made successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error making reservation: {e}', 'error')
         print(f"Make reservation error: {e}")
         if conn:
             conn.rollback()
@@ -782,11 +799,12 @@ def make_reservation():
 @app.route('/update_reservation_status/<int:reservation_id>/<status>')
 def update_reservation_status(reservation_id, status):
     if 'user_id' not in session or session['role'] not in ['admin', 'biller']:
+        flash('Unauthorized access to update reservation status.', 'error')
         return redirect(url_for('login'))
 
     valid_statuses = ['confirmed', 'cancelled', 'completed']
     if status not in valid_statuses:
-        flash('Invalid status', 'error')
+        flash('Invalid status provided for reservation.', 'error')
         return redirect(url_for('reservations'))
 
     conn = None
@@ -798,7 +816,7 @@ def update_reservation_status(reservation_id, status):
         flash(f'Reservation status updated to {status}!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error updating reservation status: {e}', 'error')
         print(f"Update reservation status error: {e}")
         if conn:
             conn.rollback()
@@ -811,6 +829,7 @@ def update_reservation_status(reservation_id, status):
 @app.route('/bill/<int:order_id>')
 def bill(order_id):
     if 'user_id' not in session:
+        flash('Unauthorized access to bill.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -841,7 +860,7 @@ def bill(order_id):
         order_items = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching bill details: {e}', 'error')
         print(f"Bill page error: {e}")
     finally:
         if conn:
@@ -852,6 +871,7 @@ def bill(order_id):
 @app.route('/download_bill/<int:order_id>')
 def download_bill(order_id):
     if 'user_id' not in session:
+        flash('Unauthorized access to download bill.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -870,7 +890,7 @@ def download_bill(order_id):
         order = cur.fetchone()
 
         if not order:
-            flash('Order not found', 'error')
+            flash('Order not found for download.', 'error')
             return redirect(url_for('orders'))
 
         cur.execute('''
@@ -882,7 +902,7 @@ def download_bill(order_id):
         order_items = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error preparing bill for download: {e}', 'error')
         print(f"Download bill error: {e}")
         return redirect(url_for('orders'))
     finally:
@@ -902,11 +922,11 @@ Items:
 """
 
     for item in order_items:
-        bill_content += f"{item['item_name']} (x{item['quantity']}) - ${item['price']:.2f} each - Total: ${item['quantity'] * item['price']:.2f}\n"
+        bill_content += f"{item['item_name']} (x{item['quantity']}) - ₹{item['price']:.2f} each - Total: ₹{item['quantity'] * item['price']:.2f}\n"
 
     bill_content += f"""
 ----------------------------------
-Grand Total: $ {order['total_amount']:.2f}
+Grand Total: ₹{order['total_amount']:.2f}
 ----------------------------------
 Thank you for your business!
 """
@@ -919,6 +939,7 @@ Thank you for your business!
 @app.route('/reports')
 def reports():
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access to reports.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -963,7 +984,7 @@ def reports():
         customer_stats = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching reports: {e}', 'error')
         print(f"Reports page error: {e}")
     finally:
         if conn:
@@ -977,6 +998,7 @@ def reports():
 @app.route('/users')
 def users():
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access to user management.', 'error')
         return redirect(url_for('login'))
 
     conn = None
@@ -988,7 +1010,7 @@ def users():
         users_list = cur.fetchall()
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error fetching users: {e}', 'error')
         print(f"Users page error: {e}")
     finally:
         if conn:
@@ -999,6 +1021,7 @@ def users():
 @app.route('/add_user', methods=['POST'])
 def add_user():
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access to add user.', 'error')
         return redirect(url_for('login'))
 
     username = request.form['username']
@@ -1025,7 +1048,7 @@ def add_user():
             flash('User added successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error adding user: {e}', 'error')
         print(f"Add user error: {e}")
         if conn:
             conn.rollback()
@@ -1038,6 +1061,7 @@ def add_user():
 @app.route('/delete_user/<int:user_id>')
 def delete_user(user_id):
     if 'user_id' not in session or session['role'] != 'admin':
+        flash('Unauthorized access to delete user.', 'error')
         return redirect(url_for('login'))
 
     if user_id == session['user_id']:
@@ -1053,7 +1077,7 @@ def delete_user(user_id):
         flash('User deleted successfully!', 'success')
         cur.close()
     except Exception as e:
-        flash(f'Database error: {e}', 'error')
+        flash(f'Database error deleting user: {e}', 'error')
         print(f"Delete user error: {e}")
         if conn:
             conn.rollback()
