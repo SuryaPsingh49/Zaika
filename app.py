@@ -7,22 +7,22 @@ from flask_moment import Moment
 import psycopg2
 from psycopg2 import extras
 from dotenv import load_dotenv
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
+from werkzeug.utils import secure_filename # Import secure_filename
 
 load_dotenv() # Load environment variables from .env file
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
 
-# Configure Cloudinary
-# These environment variables must be set on Render (and in your local .env)
-cloudinary.config(
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    api_key = os.environ.get('CLOUDINARY_API_KEY'),
-    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
-)
+# Configuration for local file uploads
+UPLOAD_FOLDER = 'static/uploads/menu_images'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Create upload folder if it doesn't exist
+# On Render, this folder will be created, but its contents are ephemeral
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # Initialize Flask-Moment
 moment = Moment(app)
@@ -41,6 +41,11 @@ def js_string_filter(s):
 # Database configuration for PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
 print(f"DEBUG: DATABASE_URL loaded: {DATABASE_URL}")
+
+def allowed_file(filename):
+    """Checks if the uploaded file has an allowed extension."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
     """Establishes a connection to the PostgreSQL database."""
@@ -71,7 +76,7 @@ def init_db():
             );
         ''')
 
-        # Menu items table - image_url column is TEXT to store Cloudinary URLs or external URLs
+        # Menu items table - image_url column is TEXT to store local paths
         cur.execute('''
             CREATE TABLE IF NOT EXISTS menu_items (
                 id SERIAL PRIMARY KEY,
@@ -79,7 +84,7 @@ def init_db():
                 description TEXT,
                 price REAL NOT NULL,
                 category TEXT NOT NULL,
-                image_url TEXT, -- This will now store Cloudinary URLs or external URLs
+                image_url TEXT, -- This will now store local relative paths (e.g., /static/uploads/menu_images/image.jpg)
                 available BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -340,21 +345,22 @@ def add_menu_item():
     description = request.form['description']
     price = float(request.form['price'])
     category = request.form['category']
-    image_url = request.form.get('image_url', '') # Default to URL if no file
+    image_url = None # Initialize image_url to None
 
-    # Handle file upload to Cloudinary
-    if 'image_file' in request.files and request.files['image_file'].filename != '':
-        file_to_upload = request.files['image_file']
-        try:
-            # Upload to Cloudinary
-            upload_result = cloudinary.uploader.upload(file_to_upload, folder="zaika_menu_images")
-            image_url = upload_result['secure_url'] # Get the secure URL from Cloudinary
-            flash('Image uploaded to Cloudinary successfully!', 'success')
-        except Exception as e:
-            flash(f'Image upload failed: {e}', 'error')
-            print(f"Cloudinary upload error: {e}")
-            # If upload fails, revert to provided URL or empty string
-            image_url = request.form.get('image_url', '')
+    # Handle file upload to local static folder
+    if 'image_file' in request.files:
+        file = request.files['image_file']
+        if file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            image_url = url_for('static', filename=f'uploads/menu_images/{filename}') # Store static URL
+            flash('Image uploaded successfully!', 'success')
+        else:
+            flash('Invalid file type or no file selected.', 'error')
+    else:
+        flash('No image file provided.', 'error')
+
 
     conn = None
     try:
@@ -385,23 +391,46 @@ def edit_menu_item(item_id):
     description = request.form['description']
     price = float(request.form['price'])
     category = request.form['category']
-    image_url = request.form.get('image_url', '') # Get existing/new URL from form
     available = True if 'available' in request.form else False
 
-    # Handle file upload for edit to Cloudinary
-    if 'image_file' in request.files and request.files['image_file'].filename != '':
-        file_to_upload = request.files['image_file']
-        try:
-            upload_result = cloudinary.uploader.upload(file_to_upload, folder="zaika_menu_images")
-            image_url = upload_result['secure_url'] # New image from Cloudinary takes precedence
-            flash('New image uploaded to Cloudinary successfully!', 'success')
-        except Exception as e:
-            flash(f'New image upload failed: {e}', 'error')
-            print(f"Cloudinary upload error: {e}")
-            # If upload fails, keep the previously provided URL
-            image_url = request.form.get('image_url', '') # Re-read in case it was changed in form
-
+    # Fetch existing image_url from the database first
     conn = None
+    existing_image_url = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=extras.RealDictCursor)
+        cur.execute('SELECT image_url FROM menu_items WHERE id = %s', (item_id,))
+        item_data = cur.fetchone()
+        if item_data:
+            existing_image_url = item_data['image_url']
+        cur.close()
+    except Exception as e:
+        flash(f'Database error fetching existing image: {e}', 'error')
+        print(f"Edit menu item fetch error: {e}")
+        existing_image_url = None # Proceed with None if fetch fails
+    finally:
+        if conn:
+            conn.close()
+
+    image_url_to_save = existing_image_url # Default to existing URL
+
+    # Handle new file upload for edit
+    if 'image_file' in request.files:
+        file = request.files['image_file']
+        if file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            image_url_to_save = url_for('static', filename=f'uploads/menu_images/{filename}') # New image takes precedence
+            flash('New image uploaded successfully!', 'success')
+        elif file.filename == '': # No new file uploaded, keep existing
+            image_url_to_save = existing_image_url
+        else: # Invalid file type for new upload
+            flash('Invalid file type for new image.', 'error')
+            image_url_to_save = existing_image_url # Keep existing if new upload is invalid
+
+
+    conn = None # Re-establish connection for the update
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -409,7 +438,7 @@ def edit_menu_item(item_id):
             UPDATE menu_items
             SET name = %s, description = %s, price = %s, category = %s, image_url = %s, available = %s
             WHERE id = %s
-        ''', (name, description, price, category, image_url, available, item_id))
+        ''', (name, description, price, category, image_url_to_save, available, item_id))
         conn.commit()
         flash('Menu item updated successfully!', 'success')
         cur.close()
