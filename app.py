@@ -1,17 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
 import os
 import json
-from datetime import datetime, UTC # Import UTC
+from datetime import datetime, UTC
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_moment import Moment
-import psycopg2 # Import psycopg2 for PostgreSQL
-from psycopg2 import extras # For dictionary-like rows
-from dotenv import load_dotenv # Import load_dotenv
+import psycopg2
+from psycopg2 import extras
+from dotenv import load_dotenv
+from werkzeug.utils import secure_filename # Import secure_filename
 
-load_dotenv() # Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production') # Use environment variable for secret key
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
+
+# Configuration for file uploads
+UPLOAD_FOLDER = 'static/uploads/menu_images'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Create upload folder if it doesn't exist
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # Initialize Flask-Moment
 moment = Moment(app)
@@ -19,7 +29,6 @@ moment = Moment(app)
 # Context processor to make 'now' available in all templates
 @app.context_processor
 def inject_now():
-    # Use timezone-aware objects to represent datetimes in UTC
     return {'now': datetime.now(UTC)}
 
 # Custom Jinja2 filter to escape strings for JavaScript
@@ -29,11 +38,13 @@ def js_string_filter(s):
     return json.dumps(s)
 
 # Database configuration for PostgreSQL
-# Render automatically sets DATABASE_URL for PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
-# --- DEBUGGING LINE START ---
 print(f"DEBUG: DATABASE_URL loaded: {DATABASE_URL}")
-# --- DEBUGGING LINE END ---
+
+def allowed_file(filename):
+    """Checks if the uploaded file has an allowed extension."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
     """Establishes a connection to the PostgreSQL database."""
@@ -41,7 +52,6 @@ def get_db_connection():
         raise ValueError("DATABASE_URL environment variable not set.")
     try:
         conn = psycopg2.connect(DATABASE_URL)
-        # Use RealDictCursor to get dictionary-like rows
         return conn
     except Exception as e:
         print(f"Error connecting to database: {e}")
@@ -52,9 +62,8 @@ def init_db():
     conn = None
     try:
         conn = get_db_connection()
-        cur = conn.cursor() # Get a cursor for executing SQL commands
+        cur = conn.cursor()
 
-        # Users table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -66,7 +75,7 @@ def init_db():
             );
         ''')
 
-        # Menu items table
+        # Menu items table - Added image_url column
         cur.execute('''
             CREATE TABLE IF NOT EXISTS menu_items (
                 id SERIAL PRIMARY KEY,
@@ -74,12 +83,12 @@ def init_db():
                 description TEXT,
                 price REAL NOT NULL,
                 category TEXT NOT NULL,
+                image_url TEXT, -- New column for image URL (can be local path or external URL)
                 available BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         ''')
 
-        # Orders table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id SERIAL PRIMARY KEY,
@@ -93,7 +102,6 @@ def init_db():
             );
         ''')
 
-        # Order items table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS order_items (
                 id SERIAL PRIMARY KEY,
@@ -106,7 +114,6 @@ def init_db():
             );
         ''')
 
-        # Reservations table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS reservations (
                 id SERIAL PRIMARY KEY,
@@ -125,7 +132,6 @@ def init_db():
             );
         ''')
 
-        # Insert default admin user if not exists
         admin_password = generate_password_hash('admin123')
         cur.execute('''
             INSERT INTO users (username, email, password, role)
@@ -133,30 +139,15 @@ def init_db():
             ON CONFLICT (username) DO NOTHING;
         ''', (admin_password,))
 
-        # Removed sample menu items insertion
-        # sample_menu = [
-        #     ('Burger', 'Classic beef burger with cheese', 12.50, 'Main Course'),
-        #     ('Fries', 'Crispy golden fries', 4.00, 'Side'),
-        #     ('Coke', 'Refreshing cold drink', 2.50, 'Beverage')
-        # ]
-        # for item in sample_menu:
-        #     cur.execute('''
-        #         INSERT INTO menu_items (name, description, price, category)
-        #         VALUES (%s, %s, %s, %s)
-        #         ON CONFLICT (name) DO NOTHING;
-        #     ''', item)
-
         conn.commit()
     except Exception as e:
         print(f"Error initializing database: {e}")
         if conn:
-            conn.rollback() # Rollback in case of error
+            conn.rollback()
     finally:
         if conn:
             conn.close()
 
-# Initialize database on startup
-# This will run when the app starts on Render
 with app.app_context():
     init_db()
 
@@ -175,7 +166,6 @@ def login():
         conn = None
         try:
             conn = get_db_connection()
-            # Use RealDictCursor for fetching rows as dictionaries
             cur = conn.cursor(cursor_factory=extras.RealDictCursor)
             cur.execute('SELECT * FROM users WHERE username = %s', (username,))
             user = cur.fetchone()
@@ -211,10 +201,8 @@ def register():
             conn = get_db_connection()
             cur = conn.cursor()
 
-            # Check if user already exists
-            cur.execute('SELECT * FROM users WHERE username = %s OR email = %s',
-                                   (username, email))
-            existing_user = cur.fetchone()
+            existing_user = conn.execute('SELECT * FROM users WHERE username = %s OR email = %s',
+                                   (username, email)).fetchone()
 
             if existing_user:
                 flash('Username or email already exists', 'error')
@@ -255,9 +243,7 @@ def dashboard():
         cur = conn.cursor(cursor_factory=extras.RealDictCursor)
         role = session['role']
 
-        # Get role-specific data
         if role == 'admin':
-            # Get summary statistics
             cur.execute('SELECT COUNT(*) as count FROM orders')
             total_orders = cur.fetchone()['count']
             cur.execute('SELECT COUNT(*) as count FROM orders WHERE status = %s', ('pending',))
@@ -284,7 +270,6 @@ def dashboard():
             }
 
         elif role == 'cook':
-            # Get assigned orders
             cur.execute('''
                 SELECT o.*, u.username as customer_name
                 FROM orders o
@@ -297,7 +282,6 @@ def dashboard():
             data = {'assigned_orders': assigned_orders}
 
         elif role == 'biller':
-            # Get ready orders
             cur.execute('''
                 SELECT o.*, u.username as customer_name
                 FROM orders o
@@ -310,7 +294,6 @@ def dashboard():
             data = {'ready_orders': ready_orders}
 
         else:  # customer
-            # Get customer's orders
             cur.execute('''
                 SELECT * FROM orders
                 WHERE customer_id = %s
@@ -339,7 +322,7 @@ def menu():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=extras.RealDictCursor)
-        cur.execute('SELECT * FROM menu_items WHERE available = TRUE ORDER BY category, name')
+        cur.execute('SELECT id, name, description, price, category, image_url, available, created_at FROM menu_items WHERE available = TRUE ORDER BY category, name')
         menu_items = cur.fetchall()
         cur.close()
     except Exception as e:
@@ -360,13 +343,23 @@ def add_menu_item():
     description = request.form['description']
     price = float(request.form['price'])
     category = request.form['category']
+    image_url = request.form.get('image_url', '') # Get the image URL from the form
+
+    # Handle file upload
+    if 'image_file' in request.files:
+        file = request.files['image_file']
+        if file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            image_url = url_for('static', filename=f'uploads/menu_images/{filename}') # Store static URL
 
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute('INSERT INTO menu_items (name, description, price, category) VALUES (%s, %s, %s, %s)',
-                    (name, description, price, category))
+        cur.execute('INSERT INTO menu_items (name, description, price, category, image_url) VALUES (%s, %s, %s, %s, %s)',
+                    (name, description, price, category, image_url))
         conn.commit()
         flash('Menu item added successfully!', 'success')
         cur.close()
@@ -390,7 +383,17 @@ def edit_menu_item(item_id):
     description = request.form['description']
     price = float(request.form['price'])
     category = request.form['category']
-    available = True if 'available' in request.form else False # PostgreSQL uses TRUE/FALSE
+    image_url = request.form.get('image_url', '') # Get existing/new URL from form
+    available = True if 'available' in request.form else False
+
+    # Handle file upload for edit
+    if 'image_file' in request.files:
+        file = request.files['image_file']
+        if file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            image_url = url_for('static', filename=f'uploads/menu_images/{filename}') # New image takes precedence
 
     conn = None
     try:
@@ -398,9 +401,9 @@ def edit_menu_item(item_id):
         cur = conn.cursor()
         cur.execute('''
             UPDATE menu_items
-            SET name = %s, description = %s, price = %s, category = %s, available = %s
+            SET name = %s, description = %s, price = %s, category = %s, image_url = %s, available = %s
             WHERE id = %s
-        ''', (name, description, price, category, available, item_id))
+        ''', (name, description, price, category, image_url, available, item_id))
         conn.commit()
         flash('Menu item updated successfully!', 'success')
         cur.close()
@@ -456,7 +459,6 @@ def place_order():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Calculate total amount
         total_amount = 0
         order_items = []
 
@@ -465,7 +467,7 @@ def place_order():
             cur.execute('SELECT * FROM menu_items WHERE id = %s', (item_id,))
             menu_item = cur.fetchone()
             if menu_item:
-                item_total = menu_item[3] * quantity # Assuming price is at index 3
+                item_total = menu_item[3] * quantity
                 total_amount += item_total
                 order_items.append({
                     'menu_item_id': item_id,
@@ -473,15 +475,13 @@ def place_order():
                     'price': menu_item[3]
                 })
 
-        # Create order
         cur.execute('''
             INSERT INTO orders (customer_id, total_amount, status)
             VALUES (%s, %s, 'pending') RETURNING id;
         ''', (session['user_id'], total_amount))
 
-        order_id = cur.fetchone()[0] # Get the ID of the newly inserted order
+        order_id = cur.fetchone()[0]
 
-        # Add order items
         for item in order_items:
             cur.execute('''
                 INSERT INTO order_items (order_id, menu_item_id, quantity, price)
@@ -516,7 +516,6 @@ def orders():
         role = session['role']
 
         if role == 'admin':
-            # Get all orders
             cur.execute('''
                 SELECT o.*, u.username as customer_name, c.username as cook_name
                 FROM orders o
@@ -526,23 +525,20 @@ def orders():
             ''')
             orders_list = cur.fetchall()
 
-            # Get all cooks for assignment
             cur.execute('SELECT * FROM users WHERE role = %s', ('cook',))
             cooks = cur.fetchall()
 
         elif role == 'cook':
-            # Get assigned orders
             cur.execute('''
                 SELECT o.*, u.username as customer_name
                 FROM orders o
                 JOIN users u ON o.customer_id = u.id
-                WHERE o.cook_id = %s
-                ORDER BY o.order_date DESC
-            ''', (session['user_id'],))
+                WHERE o.cook_id = %s AND o.status IN (%s, %s)
+                ORDER BY o.order_date ASC
+            ''', (session['user_id'], 'received', 'preparing'))
             orders_list = cur.fetchall()
 
         elif role == 'biller':
-            # Get ready orders
             cur.execute('''
                 SELECT o.*, u.username as customer_name
                 FROM orders o
@@ -552,8 +548,7 @@ def orders():
             ''', ('ready', 'completed'))
             orders_list = cur.fetchall()
 
-        else:  # customer
-            # Get customer's orders
+        else:
             cur.execute('''
                 SELECT * FROM orders
                 WHERE customer_id = %s
@@ -671,7 +666,6 @@ def reservations():
         role = session['role']
 
         if role in ['admin', 'biller']:
-            # Get all reservations
             cur.execute('''
                 SELECT r.*, u.username as customer_username
                 FROM reservations r
@@ -679,8 +673,7 @@ def reservations():
                 ORDER BY r.reservation_date DESC, r.reservation_time DESC
             ''')
             reservations_list = cur.fetchall()
-        else:  # customer
-            # Get customer's reservations
+        else:
             cur.execute('''
                 SELECT * FROM reservations
                 WHERE customer_id = %s
@@ -774,7 +767,6 @@ def bill(order_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=extras.RealDictCursor)
 
-        # Get order details
         cur.execute('''
             SELECT o.*, u.username as customer_name, u.email as customer_email
             FROM orders o
@@ -787,7 +779,6 @@ def bill(order_id):
             flash('Order not found', 'error')
             return redirect(url_for('orders'))
 
-        # Get order items
         cur.execute('''
             SELECT oi.*, mi.name as item_name
             FROM order_items oi
@@ -845,10 +836,8 @@ def download_bill(order_id):
         if conn:
             conn.close()
 
-    # Convert the order_date (which is a datetime object from psycopg2) to a string for formatting
     order_datetime = order['order_date']
 
-    # Format the bill content as a plain text string
     bill_content = f"""
 Zaika Restaurant - Bill
 ----------------------------------
@@ -869,7 +858,6 @@ Grand Total: $ {order['total_amount']:.2f}
 Thank you for your business!
 """
 
-    # Create a response with the bill content as a text file
     response = Response(bill_content, mimetype='text/plain')
     response.headers['Content-Disposition'] = f"attachment; filename=bill_order_{order['id']}.txt"
     return response
@@ -888,7 +876,6 @@ def reports():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=extras.RealDictCursor)
 
-        # Daily sales report
         cur.execute('''
             SELECT DATE(order_date) as date, COUNT(*) as order_count, SUM(total_amount) as total_sales
             FROM orders
@@ -899,7 +886,6 @@ def reports():
         ''', ('completed',))
         daily_sales = cur.fetchall()
 
-        # Popular items report
         cur.execute('''
             SELECT mi.name, SUM(oi.quantity) as total_quantity, SUM(oi.quantity * oi.price) as total_revenue
             FROM order_items oi
@@ -912,7 +898,6 @@ def reports():
         ''', ('completed',))
         popular_items = cur.fetchall()
 
-        # Customer statistics
         cur.execute('''
             SELECT u.username, COUNT(o.id) as order_count, SUM(o.total_amount) as total_spent
             FROM users u
@@ -973,10 +958,8 @@ def add_user():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Check if user already exists
-        cur.execute('SELECT * FROM users WHERE username = %s OR email = %s',
-                               (username, email))
-        existing_user = cur.fetchone()
+        existing_user = conn.execute('SELECT * FROM users WHERE username = %s OR email = %s',
+                               (username, email)).fetchone()
 
         if existing_user:
             flash('Username or email already exists', 'error')
@@ -1003,7 +986,6 @@ def delete_user(user_id):
     if 'user_id' not in session or session['role'] != 'admin':
         return redirect(url_for('login'))
 
-    # Don't allow deleting self
     if user_id == session['user_id']:
         flash('Cannot delete your own account', 'error')
         return redirect(url_for('users'))
@@ -1028,7 +1010,5 @@ def delete_user(user_id):
     return redirect(url_for('users'))
 
 if __name__ == '__main__':
-    # For local development, you might still want debug=True
-    # For Render, it will use the PORT environment variable
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG') == '1')
