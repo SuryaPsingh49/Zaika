@@ -199,10 +199,12 @@ def register():
         conn = None
         try:
             conn = get_db_connection()
-            cur = conn.cursor()
+            cur = conn.cursor() # Get a cursor here
 
-            existing_user = conn.execute('SELECT * FROM users WHERE username = %s OR email = %s',
-                                   (username, email)).fetchone()
+            # Check if user already exists using the cursor
+            cur.execute('SELECT * FROM users WHERE username = %s OR email = %s',
+                                   (username, email))
+            existing_user = cur.fetchone()
 
             if existing_user:
                 flash('Username or email already exists', 'error')
@@ -212,8 +214,8 @@ def register():
                             (username, email, hashed_password, role))
                 conn.commit()
                 flash('Registration successful! Please login.', 'success')
-                cur.close()
-                return redirect(url_for('login'))
+            cur.close() # Close the cursor after operations
+            return redirect(url_for('login'))
         except Exception as e:
             flash(f'Database error: {e}', 'error')
             print(f"Registration error: {e}")
@@ -293,7 +295,7 @@ def dashboard():
 
             data = {'ready_orders': ready_orders}
 
-        else:  # customer
+        else:
             cur.execute('''
                 SELECT * FROM orders
                 WHERE customer_id = %s
