@@ -133,7 +133,7 @@ def init_db():
             ON CONFLICT (username) DO NOTHING;
         ''', (admin_password,))
 
-        # Insert sample menu items (if desired, uncomment and add items)
+        # Removed sample menu items insertion
         # sample_menu = [
         #     ('Burger', 'Classic beef burger with cheese', 12.50, 'Main Course'),
         #     ('Fries', 'Crispy golden fries', 4.00, 'Side'),
