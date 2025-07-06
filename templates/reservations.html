@@ -1,0 +1,143 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-8">Reservations Management</h1>
+
+    {# Customer: Make a new reservation form #}
+    {% if session.get('role') == 'customer' %}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Make a New Reservation</h3>
+        <form method="POST" action="{{ url_for('make_reservation') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="customer_name" class="block text-gray-700 text-sm font-semibold mb-2">Your Name</label>
+                <input type="text" id="customer_name" name="customer_name"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., John Doe" value="{{ session.get('username') }}" required>
+            </div>
+            <div>
+                <label for="phone" class="block text-gray-700 text-sm font-semibold mb-2">Phone Number</label>
+                <input type="tel" id="phone" name="phone"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., +91 9876543210" required>
+            </div>
+            <div>
+                <label for="email" class="block text-gray-700 text-sm font-semibold mb-2">Email (Optional)</label>
+                <input type="email" id="email" name="email"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., your@example.com">
+            </div>
+            <div>
+                <label for="guest_count" class="block text-gray-700 text-sm font-semibold mb-2">Number of Guests</label>
+                <input type="number" id="guest_count" name="guest_count" min="1" value="1"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       required>
+            </div>
+            <div>
+                <label for="reservation_date" class="block text-gray-700 text-sm font-semibold mb-2">Reservation Date</label>
+                <input type="date" id="reservation_date" name="reservation_date"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       required>
+            </div>
+            <div>
+                <label for="reservation_time" class="block text-gray-700 text-sm font-semibold mb-2">Reservation Time</label>
+                <input type="time" id="reservation_time" name="reservation_time"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       required>
+            </div>
+            <div class="md:col-span-2">
+                <label for="special_requests" class="block text-gray-700 text-sm font-semibold mb-2">Special Requests (Optional)</label>
+                <textarea id="special_requests" name="special_requests" rows="3"
+                          class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                          placeholder="e.g., High chair needed, table by the window"></textarea>
+            </div>
+            <div class="md:col-span-2 flex justify-end">
+                <button type="submit" class="btn-primary flex items-center gap-2">
+                    <i class="fas fa-calendar-plus"></i>
+                    <span>Make Reservation</span>
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    {# Reservations Listing #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">
+            {% if session.get('role') == 'admin' or session.get('role') == 'biller' %}All Reservations
+            {% else %}Your Reservations
+            {% endif %}
+        </h3>
+
+        {% if reservations %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow-md">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Res ID</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Customer Name</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Date</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Time</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Guests</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Status</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Requests</th>
+                        {% if session.get('role') == 'admin' or session.get('role') == 'biller' %}
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reservation in reservations %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.id }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.customer_name }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.reservation_date }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.reservation_time }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.guest_count }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold
+                                {% if reservation.status == 'confirmed' %}bg-green-100 text-green-800
+                                {% elif reservation.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                {% elif reservation.status == 'cancelled' %}bg-red-100 text-red-800
+                                {% elif reservation.status == 'completed' %}bg-blue-100 text-blue-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ reservation.status.capitalize() }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ reservation.special_requests if reservation.special_requests else 'N/A' }}</td>
+
+                        {# Admin/Biller Actions #}
+                        {% if session.get('role') == 'admin' or session.get('role') == 'biller' %}
+                        <td class="py-3 px-4 text-sm text-gray-700 flex items-center space-x-2">
+                            {% if reservation.status == 'pending' %}
+                            <a href="{{ url_for('update_reservation_status', reservation_id=reservation.id, status='confirmed') }}"
+                               class="text-green-600 hover:text-green-800" title="Confirm Reservation">
+                                <i class="fas fa-check-circle"></i>
+                            </a>
+                            <a href="{{ url_for('update_reservation_status', reservation_id=reservation.id, status='cancelled') }}"
+                               class="text-red-600 hover:text-red-800" title="Cancel Reservation">
+                                <i class="fas fa-times-circle"></i>
+                            </a>
+                            {% elif reservation.status == 'confirmed' %}
+                            <a href="{{ url_for('update_reservation_status', reservation_id=reservation.id, status='completed') }}"
+                               class="text-blue-600 hover:text-blue-800" title="Mark as Completed">
+                                <i class="fas fa-calendar-check"></i>
+                            </a>
+                            <a href="{{ url_for('update_reservation_status', reservation_id=reservation.id, status='cancelled') }}"
+                               class="text-red-600 hover:text-red-800" title="Cancel Reservation">
+                                <i class="fas fa-times-circle"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-600">No reservations to display.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

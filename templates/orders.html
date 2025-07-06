@@ -1,0 +1,215 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-8">Order Management</h1>
+
+    {# Admin, Cook, Biller, Customer views #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">
+            {% if session.get('role') == 'admin' %}All Orders
+            {% elif session.get('role') == 'cook' %}Your Assigned Orders
+            {% elif session.get('role') == 'biller' %}Orders for Billing
+            {% else %}Your Order History
+            {% endif %}
+        </h3>
+
+        {% if orders %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow-md">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Order ID</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Customer</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Amount</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Status</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Order Date</th>
+                        {% if session.get('role') == 'admin' %}
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Assigned Cook</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>
+                        {% elif session.get('role') == 'cook' %}
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>
+                        {% elif session.get('role') == 'biller' %}
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>
+                        {% else %} {# Customer #}
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Details</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ order.id }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ order.customer_name if session.get('role') != 'customer' else session.get('username') }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">₹{{ "%.2f"|format(order.total_amount) }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold
+                                {% if order.status == 'completed' %}bg-green-100 text-green-800
+                                {% elif order.status == 'pending' %}bg-yellow-100 text-yellow-800
+                                {% elif order.status == 'preparing' %}bg-blue-100 text-blue-800
+                                {% elif order.status == 'ready' %}bg-purple-100 text-purple-800
+                                {% elif order.status == 'received' %}bg-indigo-100 text-indigo-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ order.status.capitalize() }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ order.order_date }}</td>
+
+                        {# Admin Actions #}
+                        {% if session.get('role') == 'admin' %}
+                        <td class="py-3 px-4 text-sm text-gray-700">
+                            {% if order.cook_name %}{{ order.cook_name }}{% else %}
+                                {% if order.status == 'pending' %}
+                                <select onchange="assignCook(this.value, {{ order.id }})"
+                                        class="py-1 px-2 border rounded-md text-sm focus:ring-orange-500 focus:border-orange-500">
+                                    <option value="">Assign Cook</option>
+                                    {% for cook in cooks %}
+                                    <option value="{{ cook.id }}">{{ cook.username }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                Not Assigned
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-4 text-sm text-gray-700 flex items-center space-x-2">
+                            {% if order.status == 'pending' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='received') }}"
+                               class="text-indigo-600 hover:text-indigo-800" title="Mark as Received">
+                                <i class="fas fa-handshake"></i>
+                            </a>
+                            {% elif order.status == 'received' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='preparing') }}"
+                               class="text-blue-600 hover:text-blue-800" title="Mark as Preparing">
+                                <i class="fas fa-hourglass-start"></i>
+                            </a>
+                            {% elif order.status == 'preparing' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='ready') }}"
+                               class="text-purple-600 hover:text-purple-800" title="Mark as Ready">
+                                <i class="fas fa-check-circle"></i>
+                            </a>
+                            {% elif order.status == 'ready' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='completed') }}"
+                               class="text-green-600 hover:text-green-800" title="Mark as Completed">
+                                <i class="fas fa-check-double"></i>
+                            </a>
+                            <a href="{{ url_for('bill', order_id=order.id) }}"
+                               class="text-orange-600 hover:text-orange-800" title="View Bill">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+
+                        {# Cook Actions #}
+                        {% elif session.get('role') == 'cook' %}
+                        <td class="py-3 px-4 text-sm text-gray-700 flex items-center space-x-2">
+                            {% if order.status == 'received' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='preparing') }}"
+                               class="text-blue-600 hover:text-blue-800" title="Mark as Preparing">
+                                <i class="fas fa-hourglass-start"></i>
+                            </a>
+                            {% elif order.status == 'preparing' %}
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='ready') }}"
+                               class="text-green-600 hover:text-green-800" title="Mark as Ready">
+                                <i class="fas fa-check-circle"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+
+                        {# Biller Actions #}
+                        {% elif session.get('role') == 'biller' %}
+                        <td class="py-3 px-4 text-sm text-gray-700 flex items-center space-x-2">
+                            {% if order.status == 'ready' %}
+                            <a href="{{ url_for('bill', order_id=order.id) }}"
+                               class="text-orange-600 hover:text-orange-800" title="Generate Bill">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </a>
+                            <a href="{{ url_for('update_order_status', order_id=order.id, status='completed') }}"
+                               class="text-green-600 hover:text-green-800" title="Mark as Completed">
+                                <i class="fas fa-check-double"></i>
+                            </a>
+                            {% elif order.status == 'completed' %}
+                            <a href="{{ url_for('bill', order_id=order.id) }}"
+                               class="text-gray-600 hover:text-gray-800" title="View Bill">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+
+                        {# Customer Actions #}
+                        {% else %}
+                        <td class="py-3 px-4 text-sm text-gray-700">
+                            <button onclick="showOrderDetails({{ order.id }})"
+                                    class="text-blue-600 hover:text-blue-800" title="View Details">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-600">No orders to display.</p>
+        {% endif %}
+    </div>
+
+    {# Order Details Modal (for Customer view and Admin/Biller when viewing details) #}
+    <div id="orderDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 class="text-xl font-semibold text-gray-800">Order Details</h3>
+                <button onclick="closeOrderDetailsModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <div id="modalContent">
+                <!-- Order details will be loaded here via JavaScript -->
+                <p>Loading order details...</p>
+            </div>
+            <div class="mt-6 text-right">
+                <button onclick="closeOrderDetailsModal()" class="btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function assignCook(cookId, orderId) {
+            if (cookId) {
+                window.location.href = `/assign_order/${orderId}/${cookId}`;
+            }
+        }
+
+        async function showOrderDetails(orderId) {
+            const modal = document.getElementById('orderDetailsModal');
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = '<p class="text-center text-gray-600"><i class="fas fa-spinner fa-spin mr-2"></i>Loading order details...</p>';
+            modal.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`/get_order_details/${orderId}`);
+                const data = await response.json();
+
+                if (data.items && data.items.length > 0) {
+                    let detailsHtml = '<ul class="list-disc pl-5 space-y-2 text-gray-700">';
+                    let totalAmount = 0;
+                    data.items.forEach(item => {
+                        detailsHtml += `<li>${item.name} (x${item.quantity}) - ₹${item.price.toFixed(2)} each = ₹${item.total.toFixed(2)}</li>`;
+                        totalAmount += item.total;
+                    });
+                    detailsHtml += `</ul><p class="text-right font-bold text-lg mt-4">Total: ₹${totalAmount.toFixed(2)}</p>`;
+                    modalContent.innerHTML = detailsHtml;
+                } else {
+                    modalContent.innerHTML = '<p class="text-gray-600">No items found for this order.</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching order details:', error);
+                modalContent.innerHTML = '<p class="text-red-600">Failed to load order details. Please try again.</p>';
+            }
+        }
+
+        function closeOrderDetailsModal() {
+            document.getElementById('orderDetailsModal').classList.add('hidden');
+        }
+    </script>
+</div>
+{% endblock %}

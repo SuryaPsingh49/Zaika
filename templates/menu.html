@@ -1,0 +1,186 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-8">Our Delicious Menu</h1>
+
+    {# Admin: Add New Menu Item Form #}
+    {% if session.get('role') == 'admin' %}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Add New Menu Item</h3>
+        <form method="POST" action="{{ url_for('add_menu_item') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="name" class="block text-gray-700 text-sm font-semibold mb-2">Item Name</label>
+                <input type="text" id="name" name="name"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., Margherita Pizza" required>
+            </div>
+            <div>
+                <label for="price" class="block text-gray-700 text-sm font-semibold mb-2">Price (₹)</label>
+                <input type="number" id="price" name="price" step="0.01"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., 12.99" required>
+            </div>
+            <div class="md:col-span-2">
+                <label for="description" class="block text-gray-700 text-sm font-semibold mb-2">Description</label>
+                <textarea id="description" name="description" rows="3"
+                          class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                          placeholder="A brief description of the item"></textarea>
+            </div>
+            <div>
+                <label for="category" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
+                <select id="category" name="category"
+                        class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                        required>
+                    <option value="">Select Category</option>
+                    <option value="Appetizer">Appetizer</option>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Dessert">Dessert</option>
+                    <option value="Beverage">Beverage</option>
+                    <option value="Breakfast">Breakfast</option>
+                    <option value="Lunch">Lunch</option>
+                    <option value="Dinner">Dinner</option>
+                    <option value="Snack">Snack</option>
+                </select>
+            </div>
+            <div class="md:col-span-2 flex justify-end">
+                <button type="submit" class="btn-primary flex items-center gap-2">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Add Item</span>
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    {# Menu Listing #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Available Items</h3>
+        {% if menu_items %}
+        <form method="POST" action="{{ url_for('place_order') }}" id="orderForm">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for item in menu_items %}
+                <div class="bg-gray-50 p-6 rounded-lg shadow-md flex flex-col justify-between border border-gray-200 hover:shadow-lg transition duration-200 ease-in-out">
+                    <div>
+                        <h4 class="text-xl font-bold text-gray-800 mb-2">{{ item.name }}</h4>
+                        <p class="text-gray-600 text-sm mb-3">{{ item.description }}</p>
+                        <p class="text-orange-600 text-lg font-semibold mb-4">₹{{ "%.2f"|format(item.price) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        {% if session.get('role') == 'customer' %}
+                        <div class="flex items-center space-x-2">
+                            <input type="hidden" name="cart_items" value="{{ item.id }}">
+                            <label for="quantity_{{ item.id }}" class="text-gray-700 text-sm">Qty:</label>
+                            <input type="number" id="quantity_{{ item.id }}" name="quantities" value="0" min="0"
+                                   class="w-16 py-1 px-2 border rounded-lg text-center text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-500">
+                        </div>
+                        {% elif session.get('role') == 'admin' %}
+                        <div class="flex space-x-2">
+                            <button type="button" onclick="openEditModal({{ item.id }}, '{{ item.name | js_string }}', '{{ item.description | js_string }}', {{ item.price }}, '{{ item.category | js_string }}', {{ item.available }})"
+                                    class="text-blue-600 hover:text-blue-800" title="Edit Item">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <a href="{{ url_for('delete_menu_item', item_id=item.id) }}"
+                               class="text-red-600 hover:text-red-800" title="Delete Item"
+                               onclick="return confirm('Are you sure you want to delete {{ item.name }}?');">
+                                <i class="fas fa-trash-alt"></i>
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if session.get('role') == 'customer' %}
+            <div class="mt-8 text-right">
+                <button type="submit" class="btn-primary py-3 px-6 text-lg shadow-md hover:shadow-lg flex items-center gap-2 ml-auto">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Place Order</span>
+                </button>
+            </div>
+            {% endif %}
+        </form>
+        {% else %}
+        <p class="text-gray-600">No menu items available at the moment.</p>
+        {% endif %}
+    </div>
+
+    {# Edit Menu Item Modal (Admin Only) #}
+    {% if session.get('role') == 'admin' %}
+    <div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 class="text-xl font-semibold text-gray-800">Edit Menu Item</h3>
+                <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form method="POST" id="editForm">
+                <input type="hidden" id="editItemId" name="item_id">
+                <div class="mb-4">
+                    <label for="editName" class="block text-gray-700 text-sm font-semibold mb-2">Item Name</label>
+                    <input type="text" id="editName" name="name"
+                           class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                           required>
+                </div>
+                <div class="mb-4">
+                    <label for="editPrice" class="block text-gray-700 text-sm font-semibold mb-2">Price (₹)</label>
+                    <input type="number" id="editPrice" name="price" step="0.01"
+                           class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                           required>
+                </div>
+                <div class="mb-4">
+                    <label for="editDescription" class="block text-gray-700 text-sm font-semibold mb-2">Description</label>
+                    <textarea id="editDescription" name="description" rows="3"
+                              class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label for="editCategory" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
+                    <select id="editCategory" name="category"
+                            class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                            required>
+                        <option value="Appetizer">Appetizer</option>
+                        <option value="Main Course">Main Course</option>
+                        <option value="Dessert">Dessert</option>
+                        <option value="Beverage">Beverage</option>
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Lunch">Lunch</option>
+                        <option value="Dinner">Dinner</option>
+                        <option value="Snack">Snack</option>
+                    </select>
+                </div>
+                <div class="mb-6 flex items-center">
+                    <input type="checkbox" id="editAvailable" name="available" value="1" class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded">
+                    <label for="editAvailable" class="ml-2 block text-gray-700 text-sm font-semibold">Available</label>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeEditModal()" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Function to escape strings for JavaScript
+        function js_string(s) {
+            return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        }
+
+        function openEditModal(id, name, description, price, category, available) {
+            const form = document.getElementById('editForm');
+            form.action = `/edit_menu_item/${id}`;
+            document.getElementById('editItemId').value = id;
+            document.getElementById('editName').value = name;
+            document.getElementById('editDescription').value = description;
+            document.getElementById('editPrice').value = price;
+            document.getElementById('editCategory').value = category;
+            document.getElementById('editAvailable').checked = available;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+    </script>
+    {% endif %}
+</div>
+{% endblock %}

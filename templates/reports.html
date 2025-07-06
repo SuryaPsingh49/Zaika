@@ -1,0 +1,94 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-8">Reports & Analytics</h1>
+
+    {# Daily Sales Report #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Daily Sales Report</h3>
+        {% if daily_sales %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow-md">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Date</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Orders Count</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Total Sales (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in daily_sales %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ day.date }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ day.order_count }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">₹{{ "%.2f"|format(day.total_sales) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-600">No daily sales data available.</p>
+        {% endif %}
+    </div>
+
+    {# Popular Items Report #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Top 10 Popular Menu Items</h3>
+        {% if popular_items %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow-md">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Item Name</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Total Quantity Sold</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Total Revenue (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in popular_items %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ item.name }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ item.total_quantity }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">₹{{ "%.2f"|format(item.total_revenue) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-600">No popular items data available.</p>
+        {% endif %}
+    </div>
+
+    {# Customer Statistics Report #}
+    <div class="card p-6 mb-8">
+        <h3 class="text-2xl font-semibold text-gray-800 mb-6">Top 10 Customers by Spending</h3>
+        {% if customer_stats %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow-md">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Customer Username</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Total Orders</th>
+                        <th class="py-3 px-4 text-left text-sm font-semibold text-gray-600">Total Spent (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for customer in customer_stats %}
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ customer.username }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">{{ customer.order_count }}</td>
+                        <td class="py-3 px-4 text-sm text-gray-700">₹{{ "%.2f"|format(customer.total_spent) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-600">No customer statistics available.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
