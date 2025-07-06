@@ -8,7 +8,7 @@
     {% if session.get('role') == 'admin' %}
     <div class="card p-6 mb-8">
         <h3 class="text-2xl font-semibold text-gray-800 mb-6">Add New Menu Item</h3>
-        {# Added enctype="multipart/form-data" for file uploads #}
+        {# IMPORTANT: enctype="multipart/form-data" is required for file uploads #}
         <form method="POST" action="{{ url_for('add_menu_item') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4" enctype="multipart/form-data">
             <div>
                 <label for="name" class="block text-gray-700 text-sm font-semibold mb-2">Item Name</label>
@@ -32,14 +32,14 @@
                 <label for="image_url" class="block text-gray-700 text-sm font-semibold mb-2">Image URL (Optional)</label>
                 <input type="url" id="image_url" name="image_url"
                        class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
-                       placeholder="e.g., https://example.com/pizza.jpg">
-                <p class="text-gray-500 text-xs mt-1">Provide an external image URL OR upload a file below.</p>
+                       placeholder="e.g., https://external-image-host.com/pizza.jpg">
+                <p class="text-gray-500 text-xs mt-1">Provide an external image URL (e.g., from Imgur, your website) OR upload a file below. Uploaded files will be hosted on Cloudinary.</p>
             </div>
             <div class="md:col-span-2">
                 <label for="image_file" class="block text-gray-700 text-sm font-semibold mb-2">Upload Image (Optional)</label>
                 <input type="file" id="image_file" name="image_file" accept="image/png, image/jpeg, image/gif"
                        class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out">
-                <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF.</p>
+                <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF. Uploading a file will send it to Cloudinary.</p>
             </div>
             <div>
                 <label for="category" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
@@ -132,7 +132,7 @@
                 <h3 class="text-xl font-semibold text-gray-800">Edit Menu Item</h3>
                 <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
-            {# Added enctype="multipart/form-data" for file uploads #}
+            {# IMPORTANT: enctype="multipart/form-data" is required for file uploads #}
             <form method="POST" id="editForm" enctype="multipart/form-data">
                 <input type="hidden" id="editItemId" name="item_id">
                 <div class="mb-4">
@@ -156,14 +156,14 @@
                     <label for="editImageUrl" class="block text-gray-700 text-sm font-semibold mb-2">Image URL (Optional)</label>
                     <input type="url" id="editImageUrl" name="image_url"
                            class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                           placeholder="e.g., https://example.com/pizza.jpg">
-                    <p class="text-gray-500 text-xs mt-1">Provide an external image URL OR upload a new file below.</p>
+                           placeholder="e.g., https://external-image-host.com/pizza.jpg">
+                    <p class="text-gray-500 text-xs mt-1">Provide an external image URL (e.g., from Imgur, your website) OR upload a new file below.</p>
                 </div>
                 <div class="mb-4">
                     <label for="editImageFile" class="block text-gray-700 text-sm font-semibold mb-2">Upload New Image (Optional)</label>
                     <input type="file" id="editImageFile" name="image_file" accept="image/png, image/jpeg, image/gif"
                            class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-                    <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF. Uploading a file will override the Image URL.</p>
+                    <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF. Uploading a file will send it to Cloudinary and override the Image URL.</p>
                 </div>
                 <div class="mb-4">
                     <label for="editCategory" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
