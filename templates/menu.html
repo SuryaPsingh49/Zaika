@@ -8,7 +8,8 @@
     {% if session.get('role') == 'admin' %}
     <div class="card p-6 mb-8">
         <h3 class="text-2xl font-semibold text-gray-800 mb-6">Add New Menu Item</h3>
-        <form method="POST" action="{{ url_for('add_menu_item') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {# Added enctype="multipart/form-data" for file uploads #}
+        <form method="POST" action="{{ url_for('add_menu_item') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4" enctype="multipart/form-data">
             <div>
                 <label for="name" class="block text-gray-700 text-sm font-semibold mb-2">Item Name</label>
                 <input type="text" id="name" name="name"
@@ -26,6 +27,19 @@
                 <textarea id="description" name="description" rows="3"
                           class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
                           placeholder="A brief description of the item"></textarea>
+            </div>
+            <div class="md:col-span-2">
+                <label for="image_url" class="block text-gray-700 text-sm font-semibold mb-2">Image URL (Optional)</label>
+                <input type="url" id="image_url" name="image_url"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out"
+                       placeholder="e.g., https://example.com/pizza.jpg">
+                <p class="text-gray-500 text-xs mt-1">Provide an external image URL OR upload a file below.</p>
+            </div>
+            <div class="md:col-span-2">
+                <label for="image_file" class="block text-gray-700 text-sm font-semibold mb-2">Upload Image (Optional)</label>
+                <input type="file" id="image_file" name="image_file" accept="image/png, image/jpeg, image/gif"
+                       class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200 ease-in-out">
+                <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF.</p>
             </div>
             <div>
                 <label for="category" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
@@ -62,6 +76,11 @@
                 {% for item in menu_items %}
                 <div class="bg-gray-50 p-6 rounded-lg shadow-md flex flex-col justify-between border border-gray-200 hover:shadow-lg transition duration-200 ease-in-out">
                     <div>
+                        {% if item.image_url %}
+                            <img src="{{ item.image_url }}" alt="{{ item.name }}" class="w-full h-40 object-cover rounded-md mb-4">
+                        {% else %}
+                            <img src="https://placehold.co/400x200/cccccc/333333?text=No+Image" alt="No Image Available" class="w-full h-40 object-cover rounded-md mb-4">
+                        {% endif %}
                         <h4 class="text-xl font-bold text-gray-800 mb-2">{{ item.name }}</h4>
                         <p class="text-gray-600 text-sm mb-3">{{ item.description }}</p>
                         <p class="text-orange-600 text-lg font-semibold mb-4">₹{{ "%.2f"|format(item.price) }}</p>
@@ -76,7 +95,7 @@
                         </div>
                         {% elif session.get('role') == 'admin' %}
                         <div class="flex space-x-2">
-                            <button type="button" onclick="openEditModal({{ item.id }}, '{{ item.name | js_string }}', '{{ item.description | js_string }}', {{ item.price }}, '{{ item.category | js_string }}', {{ item.available }})"
+                            <button type="button" onclick="openEditModal({{ item.id }}, '{{ item.name | js_string }}', '{{ item.description | js_string }}', {{ item.price }}, '{{ item.category | js_string }}', '{{ item.image_url | js_string }}', {{ item.available }})"
                                     class="text-blue-600 hover:text-blue-800" title="Edit Item">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -113,7 +132,8 @@
                 <h3 class="text-xl font-semibold text-gray-800">Edit Menu Item</h3>
                 <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
-            <form method="POST" id="editForm">
+            {# Added enctype="multipart/form-data" for file uploads #}
+            <form method="POST" id="editForm" enctype="multipart/form-data">
                 <input type="hidden" id="editItemId" name="item_id">
                 <div class="mb-4">
                     <label for="editName" class="block text-gray-700 text-sm font-semibold mb-2">Item Name</label>
@@ -131,6 +151,19 @@
                     <label for="editDescription" class="block text-gray-700 text-sm font-semibold mb-2">Description</label>
                     <textarea id="editDescription" name="description" rows="3"
                               class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label for="editImageUrl" class="block text-gray-700 text-sm font-semibold mb-2">Image URL (Optional)</label>
+                    <input type="url" id="editImageUrl" name="image_url"
+                           class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                           placeholder="e.g., https://example.com/pizza.jpg">
+                    <p class="text-gray-500 text-xs mt-1">Provide an external image URL OR upload a new file below.</p>
+                </div>
+                <div class="mb-4">
+                    <label for="editImageFile" class="block text-gray-700 text-sm font-semibold mb-2">Upload New Image (Optional)</label>
+                    <input type="file" id="editImageFile" name="image_file" accept="image/png, image/jpeg, image/gif"
+                           class="shadow-sm appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                    <p class="text-gray-500 text-xs mt-1">Accepted formats: PNG, JPG, JPEG, GIF. Uploading a file will override the Image URL.</p>
                 </div>
                 <div class="mb-4">
                     <label for="editCategory" class="block text-gray-700 text-sm font-semibold mb-2">Category</label>
@@ -162,10 +195,13 @@
     <script>
         // Function to escape strings for JavaScript
         function js_string(s) {
-            return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            if (s === null || s === undefined) {
+                return '';
+            }
+            return String(s).replace(/'/g, "\\'").replace(/"/g, '\\"');
         }
 
-        function openEditModal(id, name, description, price, category, available) {
+        function openEditModal(id, name, description, price, category, imageUrl, available) {
             const form = document.getElementById('editForm');
             form.action = `/edit_menu_item/${id}`;
             document.getElementById('editItemId').value = id;
@@ -173,6 +209,9 @@
             document.getElementById('editDescription').value = description;
             document.getElementById('editPrice').value = price;
             document.getElementById('editCategory').value = category;
+            document.getElementById('editImageUrl').value = imageUrl; // Set the image URL
+            // Note: For security reasons, you cannot programmatically set the value of a file input.
+            // The 'editImageFile' input will always be empty when the modal opens.
             document.getElementById('editAvailable').checked = available;
             document.getElementById('editModal').classList.remove('hidden');
         }
